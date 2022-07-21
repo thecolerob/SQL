@@ -1,0 +1,35 @@
+--Create an electronics store database.
+
+CREATE TABLE electronics_store (id INTEGER PRIMARY KEY, product TEXT, color TEXT, brand TEXT, quantity INTEGER, price INTEGER);
+
+INSERT INTO electronics_store VALUES (1, "Wired Speakers","Grey", "Sony", 50, 99.99);
+INSERT INTO electronics_store VALUES (2, "Wireless Headphones", "Red", "Bose", 100, 249.99);
+INSERT INTO electronics_store VALUES (3, "Portable Radio", "Blue", "Panasonic", 50, 24.99);
+INSERT INTO electronics_store VALUES (4, "Bluetooth Speaker", "Green", "Bose", 75, 119.99);
+INSERT INTO electronics_store VALUES (5, "AirPods", "White", "Apple", 150, 119.99);
+INSERT INTO electronics_store VALUES (6, "AirPods Pro", "White", "Apple", 150, 179.99);
+INSERT INTO electronics_store VALUES (7, "Laptop", "Black", "Hp", 60, 349.99);
+INSERT INTO electronics_store VALUES (8, "Tablet", "Grey", "Samsung", 75, 129.99);
+INSERT INTO electronics_store VALUES (9, "Wireless Headphones", "Black", "COWIN", 100, 99.99);
+INSERT INTO electronics_store VALUES (10, "Laptop", "Rose Gold", "Apple", 60, 1199);
+INSERT INTO electronics_store VALUES (11, "Portable Charger", "White", "Insignia", 150, 24.99);
+INSERT INTO electronics_store VALUES (12, "Batteries", NULL, "Energizer", 300, 5.99);
+INSERT INTO electronics_store VALUES (13, "Surround Sound Speaker System", "Black", "Logitech", 50, 399.99);
+INSERT INTO electronics_store VALUES (14, "LED Lights", "Multi", "Dallatin", 100, 24.99);
+INSERT INTO electronics_store VALUES (15, "Smartphone", "Black", "Motorola", 75, 199.99);
+
+--Display the database ordered by price.
+SELECT * FROM electronics_store
+ORDER BY price ASC;
+
+--What is the average price of Apple products?
+SELECT AVG(price) "avg Apple product price"
+FROM electronics_store
+WHERE brand = 'Apple';
+
+--What are the 5 most expensive products?
+SELECT product, brand, price
+FROM electronics_store
+ORDER BY price DESC
+LIMIT 5;
+
