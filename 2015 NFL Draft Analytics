@@ -1,0 +1,37 @@
+#In this SQL code, I am querying a database that contains data from the 1st 3 rounds of the 2015 NFL Draft to answer questions about that data.
+
+#1. What pick number was DeVante Parker and by what team was he selected?
+SELECT name, pick_number, picked_by
+FROM picks
+WHERE name = 'DeVante Parker';
+
+#2. How many offensive picks occured during these rounds? (2 different answers are provided for this question)
+## SELECT COUNT(*) 
+FROM picks 
+WHERE position IN ('QB', 'RB', 'FB', 'WR', 'TE', 'OT', 'OG', 'C', 'K');
+### SELECT COUNT(*) AS total_offensive_players,
+   CASE
+   WHEN position IN ("QB", "RB", "FB", "WR", "TE", "OT", "OG", "C", "K") THEN "offensive"
+   ELSE "defensive"
+   END AS "player_type"
+FROM picks
+WHERE player_type = "offensive"
+GROUP BY "player_type";
+
+#3. Which position(s) was the most picked position?
+SELECT position, COUNT(position) AS most_picked
+FROM picks
+GROUP BY position
+ORDER BY COUNT(position) DESC
+LIMIT 1;
+
+#4. Did any team(s) draft more than 1 Cornerback?
+SELECT picked_by, SUM(position = "CB") AS CB_picks
+FROM picks
+GROUP BY picked_by
+HAVING CB_picks > 1;
+
+#5. Which team(s) selected players from the Universisty of Washington in the first 25 picks?
+SELECT pick_number, college, picked_by
+FROM picks
+WHERE college = "Washington" AND pick_number <= 25;
