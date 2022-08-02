@@ -1,3 +1,5 @@
+#In the following SQL, I am querying a dataset called chinook, which represents a digital media store and includes tables for artists, albums, media tracks, invoices, employees and customers.
+
 #1. Show Customers (their full names, customer ID, and country) who are not in the US.
 SELECT CustomerId,
 FirstName,
@@ -11,7 +13,7 @@ SELECT *
 FROM chinook.customers
 WHERE Country = 'Brazil';
 
-#3. Find the Invoices of customers who are from Brazil. The resulting table should show the customer's full name, Invoice ID, Date of the invoice, and billing country.
+#3. Find the Invoices of customers who are from Brazil. Show the customer's full name, Invoice ID, Date of the invoice, and billing country in resulting table.
 SELECT cust.FirstName,
 cust.LastName,
 inv.InvoiceId,
@@ -26,11 +28,11 @@ SELECT *
 FROM chinook.employees
 WHERE title = 'Sales Support Agent';
 
-#5. Find a unique/distinct list of billing countries from the Invoice table.
+#5. Find a unique list of billing countries from the Invoice table.
 SELECT distinct BillingCountry
 FROM chinook.invoices;
 
-#6. Provide a query that shows the invoices associated with each sales agent. The resulting table should include the Sales Agent's full name.
+#6. Provide a query that shows the invoices associated with each sales agent.
 SELECT emp.FirstName,
 emp.Lastname,
 inv.InvoiceId
@@ -65,14 +67,14 @@ i.InvoiceLineId
 FROM chinook.tracks t
 JOIN chinook.invoice_items i ON i.TrackId = t.TrackId;
 
-#11. Write a query that includes the purchased track name AND artist name with each invoice line item.
+#11. Write a query that includes the purchased track name and the artist name with each invoice line item.
 SELECT t.Name,
 t.Composer,
 i.InvoiceLineId
 FROM chinook.Invoice_items i 
 JOIN chinook.Tracks t ON i.TrackId = t.TrackId;
 
-#12. Provide a query that shows all the Tracks, and include the Album name, Media type, and Genre.
+#12. Provide a query that shows all the Tracks, along with the Album name, Media type, and Genre.
 SELECT t.name AS 'Track Name',
 alb.Title AS 'Album Name',
 med.Name AS 'Media Type',
