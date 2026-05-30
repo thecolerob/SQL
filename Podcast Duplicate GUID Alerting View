@@ -1,0 +1,79 @@
+## Podcast Duplicate GUID Alerting View ##
+
+## This view powers an n8n Slack alerting workflow that identifies duplicate episode GUIDs in podcast performance data.
+## It checks Spotify, YouTube, and RSS podcast sources for duplicate GUID records by date, source, app, show, and episode GUID.
+## The resulting view helps flag podcast metadata issues so duplicated episode records can be reviewed and corrected.
+
+create or replace view n8n_podcast_duplicate_guids (
+    dt
+  , source
+  , app_
+  , show
+  , video_episode_guid
+  , duplicate_flag
+) as (
+
+    select
+        date as dt
+      , 'spotify' as source
+      , null as app_
+      , video_series_title as show
+      , video_episode_guid
+      , count(video_episode_guid) as duplicate_flag
+    from spotify_video_plays
+    where breakout = false
+        and short = false
+    group by
+        1
+      , 2
+      , 3
+      , 4
+      , 5
+    having duplicate_flag > 1
+
+    union all
+
+    select
+        date as dt
+      , 'youtube' as source
+      , null as app_
+      , case
+            when video_series_title in ('Andrew Klavan (YouTube)', 'Ben Shapiro (YouTube)', 'Matt Walsh (YouTube)', 'Michael Knowles (YouTube)') then concat('The ', replace(video_series_title, ' (YouTube)'), ' Show')
+            when video_series_title in ('Jordan B Peterson (YouTube)') then 'The Jordan B. Peterson Podcast'
+            else replace(video_series_title, ' (YouTube)')
+        end as show
+      , video_episode_guid
+      , count(video_episode_guid) as duplicate_flag
+    from youtube_plays
+    where breakout = false
+        and short = false
+        and dt > '2024-01-01'
+    group by
+        1
+      , 2
+      , 3
+      , 4
+      , 5
+    having duplicate_flag > 1
+
+    union all
+
+    select
+        date as dt
+      , 'rss' as source
+      , app as app_
+      , podcast_series_title as show
+      , podcast_episode_guid
+      , count(podcast_episode_guid) as duplicate_flag
+    from rss_plays
+    where breakout = false
+        and short = false
+    group by
+        1
+      , 2
+      , 3
+      , 4
+      , 5
+    having duplicate_flag > 1
+
+);
