@@ -4,7 +4,7 @@
 ## It combines Spotify, YouTube, and RSS podcast performance data, calculates recent daily play totals, and compares them against rolling historical averages.
 ## The resulting view flags podcast episodes or shows with unusually high activity so the team can quickly review potential anomalies.
 
-create or replace view n8n_podscribe_anomaly_flags (
+create or replace view n8n_podcast_anomaly_flags (
     dt
   , source
   , show
