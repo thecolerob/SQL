@@ -1,0 +1,103 @@
+## Article Category Performance Analysis ##
+
+## This query identifies article categories that are generating more audience demand than their publishing volume would suggest.
+## It compares each category's share of total views against its share of total published articles over the last 120 days.
+## The resulting output highlights categories that are punching above their weight based on total view share, total distinct article share, views per article, and share performance ratio.
+
+with views as (
+    select
+        category
+      , count(*) as total_views
+    from (
+        select
+            timestamp
+          , title
+          , category
+        from ios.article_views
+        where title is not null
+            and date(timestamp) >= dateadd(day, -120, current_date())
+
+        union all
+
+        select
+            timestamp
+          , title
+          , category
+        from android.article_views
+        where title is not null
+            and date(timestamp) >= dateadd(day, -120, current_date())
+
+        union all
+
+        select
+            timestamp
+          , title
+          , category
+        from website.article_views
+        where title is not null
+            and date(timestamp) >= dateadd(day, -120, current_date())
+    )
+    group by
+        1
+    having total_views >= 1000
+)
+
+, articles as (
+    select
+        category
+      , count(distinct title) as distinct_articles
+    from (
+        select
+            timestamp
+          , title
+          , category
+        from ios.article_views
+        where title is not null
+            and date(timestamp) >= dateadd(day, -120, current_date())
+
+        union
+
+        select
+            timestamp
+          , title
+          , category
+        from android.article_views
+        where title is not null
+            and date(timestamp) >= dateadd(day, -120, current_date())
+
+        union
+
+        select
+            timestamp
+          , title
+          , category
+        from website.article_views
+        where title is not null
+            and date(timestamp) >= dateadd(day, -120, current_date())
+    )
+    group by
+        1
+)
+
+, totals as (
+    select
+        sum(total_views) as total_views_all
+      , sum(distinct_articles) as total_articles_all
+    from views v
+    join articles a using (category)
+)
+
+select
+    v.category
+  , total_views
+  , distinct_articles
+  , total_views / total_views_all as view_share
+  , distinct_articles / total_articles_all as article_share
+  , total_views / distinct_articles as views_per_article
+  , (total_views / total_views_all) / (distinct_articles / total_articles_all) as share_performance_ratio
+from views v
+join articles a
+    on v.category = a.category
+cross join totals
+order by
+    share_performance_ratio desc;
