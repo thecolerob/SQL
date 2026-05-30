@@ -1,0 +1,600 @@
+## Program Audience Reach Base Table ##
+
+## This table builds a subscription-level view of program reach by combining playback activity across web, mobile app, and connected TV platforms.
+## It normalizes legacy and current Segment playback events, maps programs and titles into standardized names, and assigns each program a launch date based on first observed viewing activity.
+## The resulting table creates one unique row for each subscription and program watched, supporting audience reach and reach analysis by plan, account, launch date, and talent.
+
+create or replace table audience_show_reach_table as (
+
+with webps as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , coalesce(program, program_name, title) as p
+      , title as t
+      , nvl(
+            case
+                when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+                else user_id
+            end
+          , anonymous_id
+        ) as user_id
+      , 1 as plays
+    from segment_events.dw_website_prod.playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-04-07'
+)
+
+, webvps as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , nvl(
+            case
+                when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+                else user_id
+            end
+          , anonymous_id
+        ) as user_id
+      , 1 as plays
+    from segment_events.dw_website_prod.video_playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-04-07'
+)
+
+, webaps as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , nvl(
+            case
+                when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+                else user_id
+            end
+          , anonymous_id
+        ) as user_id
+      , 1 as plays
+    from segment_events.dw_website_prod.audio_playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-04-07'
+)
+
+, web as (
+    select *
+    from webps
+
+    union all
+
+    select *
+    from webvps
+
+    union all
+
+    select *
+    from webaps
+)
+
+, appps as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , nvl(
+            case
+                when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+                else user_id
+            end
+          , anonymous_id
+        ) as user_id
+      , 1 as plays
+    from segment_events.dw_mobile_app_reactnative.playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-01-01'
+)
+
+, appvps as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , nvl(
+            case
+                when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+                else user_id
+            end
+          , anonymous_id
+        ) as user_id
+      , 1 as plays
+    from segment_events.dw_mobile_app_reactnative.video_playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-01-01'
+)
+
+, appaps as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , nvl(
+            case
+                when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+                else user_id
+            end
+          , anonymous_id
+        ) as user_id
+      , 1 as plays
+    from segment_events.dw_mobile_app_reactnative.audio_playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-01-01'
+)
+
+, app as (
+    select *
+    from appps
+
+    union all
+
+    select *
+    from appvps
+
+    union all
+
+    select *
+    from appaps
+)
+
+, aplps as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw_apple_tv_production.playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-03-24'
+)
+
+, aplvps as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw_apple_tv_production.video_playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-03-24'
+)
+
+, apl as (
+    select *
+    from aplps
+
+    union all
+
+    select *
+    from aplvps
+)
+
+, rokups as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw_roku_tv_production.playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-04-08'
+)
+
+, rokuvps as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw_roku_tv_production.video_playback_started
+    where dt >= '2020-01-01'
+        and dt < '2025-04-08'
+)
+
+, roku as (
+    select *
+    from rokups
+
+    union all
+
+    select *
+    from rokuvps
+)
+
+, android_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_android_prod.playback_started
+    where dt >= '2025-01-01'
+        and dt < current_date()
+)
+
+, android_tv_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_android_tv_prod.playback_started
+    where dt >= '2025-07-28'
+        and dt < current_date()
+)
+
+, apple_tv_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_apple_tv_prod.playback_started
+    where dt >= '2025-03-24'
+        and dt < current_date()
+)
+
+, fire_tv_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_fire_tv_prod.playback_started
+    where dt >= '2025-07-28'
+        and dt < current_date()
+)
+
+, ios_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_ios_prod.playback_started
+    where dt >= '2025-01-01'
+        and dt < current_date()
+)
+
+, lg_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_lg_prod.playback_started
+    where dt >= '2025-08-11'
+        and dt < current_date()
+)
+
+, roku_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_roku_prod.playback_started
+    where dt >= '2025-04-08'
+        and dt < current_date()
+)
+
+, samsung_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_samsung_prod.playback_started
+    where dt >= '2025-09-25'
+        and dt < current_date()
+)
+
+, vizio_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_vizio_prod.playback_started
+    where dt >= '2025-07-28'
+        and dt < current_date()
+)
+
+, web_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from segment_events.dw2_web_prod.playback_started
+    where dt >= '2025-04-07'
+        and dt < current_date()
+)
+
+, new as (
+    select *
+    from android_2
+
+    union all
+
+    select *
+    from android_tv_2
+
+    union all
+
+    select *
+    from apple_tv_2
+
+    union all
+
+    select *
+    from fire_tv_2
+
+    union all
+
+    select *
+    from ios_2
+
+    union all
+
+    select *
+    from lg_2
+
+    union all
+
+    select *
+    from roku_2
+
+    union all
+
+    select *
+    from samsung_2
+
+    union all
+
+    select *
+    from vizio_2
+
+    union all
+
+    select *
+    from web_2
+)
+
+, plays as (
+    select *
+    from web
+
+    union
+
+    select *
+    from app
+
+    union
+
+    select *
+    from apl
+
+    union
+
+    select *
+    from roku
+
+    union
+
+    select *
+    from new
+)
+
+, sub_history as (
+    select *
+    from subscription.history
+)
+
+, showmap as (
+    select *
+    from show.mappings
+)
+
+, playsandplans as (
+    select
+        sub_history.st
+      , plays.ts
+      , case
+            when sub_history.endts is null then
+                case
+                    when sub_history.ets is null then
+                        case
+                            when sub_history.st is null then null
+                            else timestamp_from_parts(year(current_date()) + 5, 1, 1, 0, 0, 0)
+                        end
+                    else sub_history.ets
+                end
+            else sub_history.endts
+        end as endingts
+      , plays.dt
+      , plays.p
+      , plays.t
+      , plays.user_id
+      , plays.plays
+      , sub_history.cohort
+      , sub_history.sub_id
+      , sub_history.og_plan
+      , sub_history.plan
+    from plays
+    left join sub_history
+        on plays.user_id = sub_history.user_id
+    where (plays.ts >= sub_history.st and plays.ts < endingts)
+        or (sub_history.st is null and endingts is null)
+)
+
+, mapped as (
+    select
+        *
+      , row_number() over (partition by sub_id order by ts) as pn
+    from (
+        select
+            playsandplans.ts
+          , playsandplans.dt
+          , showmap.new_program as program
+          , showmap.new_title as title
+          , playsandplans.user_id
+          , playsandplans.plays
+          , playsandplans.cohort
+          , playsandplans.sub_id
+          , playsandplans.plan
+          , playsandplans.og_plan
+        from playsandplans
+        left join showmap
+            on playsandplans.p = showmap.old_program
+                and playsandplans.t = showmap.old_title
+    )
+)
+
+, filtered as (
+    select *
+    from (
+        select
+            case
+                when program = 'What is a Woman? [HD]' then 'What is a Woman?'
+                when program = 'Am I Racist? [HD]' then 'Am I Racist?'
+                when program = 'Terror on the Prairie [HD]' then 'Terror on the Prairie'
+                when program = 'Run Hide Fight [HD]' then 'Run Hide Fight'
+                when program = 'Lady Ballers [HD]' then 'Lady Ballers'
+                else program
+            end as new_program
+          , dt
+          , user_id
+          , plan
+          , sub_id
+          , case
+                when new_program = 'The Pendragon Cycle' then '2025-10-28'
+                else min(date(ts)) over (partition by new_program)
+            end as launch_dt
+        from (
+            select *
+            from mapped
+            where plan in ('insider_plus', 'all_access', 'insider', 'reader')
+        )
+    )
+    where launch_dt <= dateadd(day, -1, current_date)
+)
+
+, recurly as (
+    select
+        uuid
+      , account_code
+      , plan_code
+      , date(convert_timezone('utc', 'america/chicago', activated_at::timestamp_ntz)) as sub_activated_dt
+      , date(convert_timezone('utc', 'america/chicago', expires_at::timestamp_ntz)) as sub_exp_dt
+    from (
+        select
+            uuid
+          , account_code
+          , plan_code
+          , activated_at
+          , expires_at
+        from dailywire_recurly.classic.subscriptions
+        where plan_code in ('insider', 'insider_plus', 'all_access', 'reader')
+    )
+    where sub_activated_dt <= dateadd(day, -1, current_date)
+)
+
+select distinct
+    uuid
+  , plan_code
+  , account_code
+  , sub_activated_dt
+  , sub_exp_dt
+  , new_program as program
+  , launch_dt
+  , host_name as talent
+from recurly r
+left join filtered f
+    on f.user_id = r.account_code
+left join hosts.mapping h
+    on h.video_name = f.new_program
+);
