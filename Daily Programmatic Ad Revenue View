@@ -1,0 +1,107 @@
+## Daily Programmatic Ad Revenue View ##
+
+## This view converts monthly programmatic ad earnings into daily revenue records for downstream Tableau reporting.
+## It expands each monthly programmatic earnings row into one row per day and estimates missing months using average confirmed daily earnings.
+## The resulting view supports daily programmatic ad revenue trend reporting across confirmed and estimated revenue periods.
+
+create or replace view ad_revenue.programmatic_daily_earnings (
+    dt
+  , status
+  , daily_ad
+  , daily_premium
+  , daily_total
+  , last_updated
+) as (
+
+with monthly as (
+    select
+        month
+      , status
+      , last_updated
+      , day(last_day(month)) as days_in_month
+      , round(ad_earnings / day(last_day(month)), 2) as daily_ad
+      , round(premium_video_earnings / day(last_day(month)), 2) as daily_premium
+      , round(total_earnings / day(last_day(month)), 2) as daily_total
+    from ad_revenue.programmatic
+)
+
+, avg_daily as (
+    select
+        round(avg(daily_ad), 2) as avg_daily_ad
+      , round(avg(daily_premium), 2) as avg_daily_premium
+      , round(avg(daily_total), 2) as avg_daily_total
+    from monthly
+    where status = 'Confirmed'
+)
+
+, latest_confirmed as (
+    select
+        date_trunc('month', max(month))::date as latest_month
+    from monthly
+    where status = 'Confirmed'
+)
+
+, missing_months as (
+    select
+        dateadd('month', g.n + 1, l.latest_month)::date as missing_month
+    from latest_confirmed l
+    cross join (
+        select
+            seq4() as n
+        from table(generator(rowcount => 24))
+    ) g
+    where dateadd('month', g.n + 1, l.latest_month) <= date_trunc('month', current_date)
+        and dateadd('month', g.n + 1, l.latest_month) not in (
+            select
+                month
+            from monthly
+        )
+)
+
+, all_months as (
+    select
+        month
+      , status
+      , last_updated
+      , days_in_month
+      , daily_ad
+      , daily_premium
+      , daily_total
+    from monthly
+
+    union all
+
+    select
+        mm.missing_month
+      , 'Estimated'
+      , current_timestamp()
+      , day(last_day(mm.missing_month))
+      , a.avg_daily_ad
+      , a.avg_daily_premium
+      , a.avg_daily_total
+    from missing_months mm
+    cross join avg_daily a
+)
+
+select
+    dateadd(day, g.n, m.month)::date as dt
+  , m.status
+  , m.daily_ad
+  , m.daily_premium
+  , m.daily_total
+  , m.last_updated
+from all_months m
+cross join (
+    select
+        seq4() as n
+    from table(generator(rowcount => 31))
+) g
+where g.n < m.days_in_month
+    and (
+        m.status != 'Estimated'
+        or dateadd(day, g.n, m.month)::date <= current_date
+    )
+order by
+    dt
+
+);
