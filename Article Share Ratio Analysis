@@ -1,0 +1,174 @@
+## Article View / Share Ratio Analysis ##
+
+## This query evaluates how frequently readers share articles relative to how many times those articles are viewed during their first 24 hours after publication.
+## It combines view and share activity across web, iOS, and Android platforms, calculates a share-to-view ratio for each article, and uses statistical outlier detection to identify articles that generate unusually high sharing behavior.
+## The resulting view can be used to surface highly shareable content and better understand which articles drive audience engagement beyond simple pageviews.
+
+create or replace view article_share_ratio (
+    post_date
+  , title
+  , views_24h
+  , shares_24h
+  , ratio
+  , z_ratio
+  , ratio_q1
+  , ratio_q3
+  , ratio_iqr
+  , ratio_cutoff
+  , ratio_flag
+) as (
+
+with merge_views as (
+    select
+        title
+      , timestamp as view_ts
+      , min(view_ts) over (partition by title) as post_ts
+    from (
+        select
+            title
+          , timestamp
+        from website.article_views
+        where timestamp >= dateadd('month', -2, date_trunc('month', current_date))
+
+        union all
+
+        select
+            title
+          , timestamp
+        from ios.article_views
+        where timestamp >= dateadd('month', -2, date_trunc('month', current_date))
+
+        union all
+
+        select
+            title
+          , timestamp
+        from android.article_views
+        where timestamp >= dateadd('month', -2, date_trunc('month', current_date))
+    )
+)
+
+, views_ as (
+    select
+        title
+      , date(post_ts) as post_date
+      , post_ts
+      , count(*) as views_24h
+    from merge_views
+    where view_ts between post_ts and dateadd('hour', 24, post_ts)
+    group by
+        title
+      , post_date
+      , post_ts
+    having count(*) > 5000
+    order by
+        2 desc
+      , 3 desc
+)
+
+, merge_shares as (
+    select
+        content_name
+      , timestamp as share_ts
+    from (
+        select
+            content_name
+          , timestamp
+        from website.article_shares
+        where timestamp >= dateadd('month', -2, date_trunc('month', current_date))
+
+        union all
+
+        select
+            content_name
+          , timestamp
+        from ios.article_shares
+        where timestamp >= dateadd('month', -2, date_trunc('month', current_date))
+
+        union all
+
+        select
+            content_name
+          , timestamp
+        from android.article_shares
+        where timestamp >= dateadd('month', -2, date_trunc('month', current_date))
+    )
+)
+
+, views_shares as (
+    select
+        v.post_date
+      , v.title
+      , v.views_24h
+      , count(*) as shares_24h
+    from merge_shares ms
+    left join views_ v
+        on v.title = ms.content_name
+    where share_ts between v.post_ts and dateadd('hour', 24, v.post_ts)
+    group by
+        1
+      , 2
+      , 3
+    having shares_24h > 1
+    order by
+        1 desc
+      , 3 desc
+)
+
+, z_scores as (
+    select
+        *
+      , (shares_24h / views_24h) as ratio
+      , (ratio - avg(ratio) over ()) / stddev(ratio) over () as z_ratio
+    from views_shares
+    group by
+        1
+      , 2
+      , 3
+      , 4
+)
+
+, tukey as (
+    select
+        approx_percentile(z_ratio, 0.25) as ratio_q1
+      , approx_percentile(z_ratio, 0.75) as ratio_q3
+    from z_scores
+)
+
+, cutoff as (
+    select
+        z.*
+      , t.ratio_q1
+      , t.ratio_q3
+      , (t.ratio_q3 - t.ratio_q1) as ratio_iqr
+      , (t.ratio_q3 + 1.5 * (t.ratio_q3 - t.ratio_q1)) as ratio_cutoff
+      , case
+            when z.z_ratio > (t.ratio_q3 + 1.5 * ratio_iqr) then 1
+            else 0
+        end as ratio_flag
+    from z_scores z
+    cross join tukey t
+)
+
+, final as (
+    select
+        post_date
+      , title
+      , views_24h
+      , shares_24h
+      , ratio
+      , z_ratio
+      , ratio_q1
+      , ratio_q3
+      , ratio_iqr
+      , ratio_cutoff
+      , ratio_flag
+    from cutoff
+)
+
+select *
+from final
+order by
+    1 desc
+  , 3 desc
+);
