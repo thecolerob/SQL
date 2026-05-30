@@ -1,0 +1,86 @@
+## Article Category Read Time Analysis ##
+
+## This query estimates typical article length by category using playback duration data from the listen-to-article feature.
+## It joins recent article view data to article audio playback events, using the audio asset duration as a proxy for read time.
+## The resulting output compares median and average estimated read time across article categories.
+
+with base as (
+    select distinct
+        a.title
+      , a.category
+      , p.duration
+    from (
+        select distinct
+            date(timestamp) as dt
+          , title
+          , category
+        from ios.article_views
+        where dt >= dateadd(day, -120, current_date())
+
+        union
+
+        select distinct
+            date(timestamp) as dt
+          , title
+          , category
+        from android.article_views
+        where dt >= dateadd(day, -120, current_date())
+
+        union
+
+        select distinct
+            date(timestamp) as dt
+          , title
+          , category
+        from website.article_views
+        where dt >= dateadd(day, -120, current_date())
+    ) a
+    left join (
+        select distinct
+            title
+          , duration
+        from ios.playbacks
+        where program = 'Listen to this Article'
+
+        union
+
+        select distinct
+            title
+          , duration
+        from android.playbacks
+        where program = 'Listen to this Article'
+
+        union
+
+        select distinct
+            title
+          , duration
+        from website.playbacks
+        where program = 'Listen to this Article'
+    ) p
+        on a.title = p.title
+    where duration is not null
+)
+
+, size as (
+    select
+        category
+      , count(distinct title) as sample_size
+    from base
+    group by
+        1
+)
+
+select
+    b.category
+  , sample_size
+  , round(median(duration) / 60, 1) as median_duration_minutes
+  , round(avg(duration) / 60, 1) as avg_duration_minutes
+from base b
+left join size s
+    on b.category = s.category
+group by
+    1
+  , 2
+order by
+    3 desc;
