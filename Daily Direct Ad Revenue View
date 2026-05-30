@@ -1,0 +1,54 @@
+## Daily Direct Ad Revenue View ##
+
+## This view converts monthly ad earnings data into daily revenue records for downstream Tableau reporting.
+## It expands each monthly direct ad revenue row into one row per day of that month and evenly distributes gross, net, and net-net revenue across the month.
+## The resulting view supports daily ad revenue trend reporting by talent, advertiser, agency, and product family.
+
+create or replace view ad_revenue.direct_daily_earnings (
+    date
+  , talent
+  , advertiser
+  , agency
+  , product_family_name
+  , gross_cpm
+  , net_cpm
+  , impressions
+  , gross_revenue
+  , net_revenue
+  , net_net_revenue
+) as
+
+select
+    dateadd(day, g.n, b.month)::date as date
+  , b.talent
+  , b.advertiser
+  , b.agency
+  , b.product_family_name
+  , b.gross_cpm
+  , b.net_cpm
+  , b.impressions
+  , gross_revenue / b.days_in_month as gross_revenue
+  , net_revenue / b.days_in_month as net_revenue
+  , net_net_revenue / b.days_in_month as net_net_revenue
+from (
+    select
+        month
+      , product_category as talent
+      , advertiser
+      , agency
+      , product_family_name
+      , gross_cpm
+      , net_cpm
+      , est_impressions_per_unit as impressions
+      , gross_revenue
+      , net_revenue
+      , net_net_revenue
+      , day(last_day(month)) as days_in_month
+    from ad_revenue.direct
+) b
+cross join (
+    select
+        seq4() as n
+    from table(generator(rowcount => 31))
+) g
+where g.n < b.days_in_month;
