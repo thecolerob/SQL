@@ -1,0 +1,74 @@
+## Program Audience Reach View ##
+
+## This view measures audience reach for each program by comparing the number of members who watched a program against the number of eligible active members after launch.
+## It uses the program reach base table to count converted members by program and plan, then compares that audience to subscriptions active during or after each program's launch date.
+## The resulting view supports program-level reach analysis by talent, plan, launch date, and audience reach rate.
+
+create or replace view program_audience_reach_analysis (
+    talent
+  , program
+  , launch_dt
+  , converted_members
+  , plan_code
+  , actives_post_launch
+  , audience_reach
+) as (
+
+with shows as (
+    select distinct
+        talent
+      , program
+      , plan_code
+      , launch_dt
+    from program_audience_reach
+)
+
+, watched as (
+    select
+        program
+      , plan_code
+      , count(distinct account_code) as converted_members
+    from program_audience_reach
+    where program is not null
+    group by
+        1
+      , 2
+)
+
+, eligible as (
+    select
+        s.program
+      , r.plan_code
+      , count(distinct r.account_code) as actives_post_launch
+    from shows s
+    join (
+        select
+            account_code
+          , plan_code
+          , date(convert_timezone('utc', 'america/chicago', expires_at::timestamp_ntz)) as expires
+        from dailywire_recurly.classic.subscriptions
+        where plan_code in ('insider', 'insider_plus', 'all_access', 'reader')
+            and date(convert_timezone('utc', 'america/chicago', activated_at::timestamp_ntz)) <= dateadd(day, -1, current_date)
+    ) r
+        on (r.expires >= s.launch_dt)
+            or (r.expires is null)
+    group by
+        1
+      , 2
+)
+
+select
+    s.talent
+  , s.program
+  , s.launch_dt
+  , w.converted_members
+  , e.plan_code
+  , e.actives_post_launch
+  , w.converted_members / e.actives_post_launch as audience_reach
+from shows s
+left join watched w using (program, plan_code)
+left join eligible e using (program, plan_code)
+where w.converted_members >= 5
+order by
+    7 desc
+);
