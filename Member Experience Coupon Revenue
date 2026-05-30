@@ -46,26 +46,26 @@ with discounts as (
                         when total_discount between 40.1 and 50 then 25
                         when total_discount between 50.1 and 60 then 30
                     end
-                when total_discount > 0 and coupon_code in ('mx3monthsfor5') then
+                when total_discount > 0 and coupon_code in ('3monthsfor5') then
                     case
                         when total_discount between 0.1 and 10 then 5.00
                         when total_discount between 10.1 and 20 then 10
                         when total_discount between 20.1 and 30 then 15
                     end
-                when total_discount in (110, 114) and coupon_code in ('mx35dollar', 'mx39dollar') then 149 - total_discount
-                when total_discount > 44 and coupon_code in ('mx30', 'mx35', 'mx40', 'mxdecade', 'mx50') then plan_value - total_discount
-                when total_discount > 149 and coupon_code in ('mx60') then 249 - total_discount
+                when total_discount in (110, 114) and coupon_code in ('35dollar', '39dollar') then 149 - total_discount
+                when total_discount > 44 and coupon_code in ('30', '35', '40', 'decade', '50') then plan_value - total_discount
+                when total_discount > 149 and coupon_code in ('60') then 249 - total_discount
             end
           , 2
         ) as revenue
       , round(
             case
                 when state in ('expired', 'canceled') then null
-                when (discount_percent is null and coupon_code in ('mx6for5') and plan_code = 'insider') and datediff(month, mo, term_start_mo) <= 6 then 30 - zeroifnull(revenue)
-                when (discount_percent is null and coupon_code in ('mx3monthsfor5') and plan_code = 'insider') and datediff(month, mo, term_start_mo) <= 3 then 15 - zeroifnull(revenue)
-                when (total_discount = 0 and discount_percent is null and coupon_code in ('mx35dollar', 'mx39dollar') and plan_code in ('insider_plus', 'all_access')) then 149 - discount
-                when (total_discount = 0 and discount_percent is not null and coupon_code in ('mx30', 'mx35', 'mx40', 'mxdecade', 'mx50') and plan_code in ('insider_plus', 'all_access')) then plan_value * (1 - (discount_percent / 100))
-                when (total_discount = 0 and discount_percent is not null and coupon_code in ('mx60') and plan_code = 'all_access') then 249 * (1 - (discount_percent / 100))
+                when (discount_percent is null and coupon_code in ('6for5') and plan_code = 'insider') and datediff(month, mo, term_start_mo) <= 6 then 30 - zeroifnull(revenue)
+                when (discount_percent is null and coupon_code in ('3monthsfor5') and plan_code = 'insider') and datediff(month, mo, term_start_mo) <= 3 then 15 - zeroifnull(revenue)
+                when (total_discount = 0 and discount_percent is null and coupon_code in ('35dollar', '39dollar') and plan_code in ('insider_plus', 'all_access')) then 149 - discount
+                when (total_discount = 0 and discount_percent is not null and coupon_code in ('30', '35', '40', 'decade', '50') and plan_code in ('insider_plus', 'all_access')) then plan_value * (1 - (discount_percent / 100))
+                when (total_discount = 0 and discount_percent is not null and coupon_code in ('60') and plan_code = 'all_access') then 249 * (1 - (discount_percent / 100))
             end
           , 2
         ) as expected_revenue
@@ -82,7 +82,7 @@ with discounts as (
           , discount_percent
           , total_discount
         from dailywire_recurly.classic.coupon_redemptions
-        where coupon_code in ('mx6for5', 'mx35dollar', 'mx30', 'mx35', 'mx40', 'mxdecade', 'mx50', 'mx60', 'mx39dollar', 'mx3monthsfor5')
+        where coupon_code in ('6for5', '35dollar', '30', '35', '40', 'decade', '50', '60', '39dollar', '3monthsfor5')
     ) c
     left join (
         select
