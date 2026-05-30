@@ -1,0 +1,102 @@
+## Member Experience Coupon Revenue Analysis ##
+
+## This view tracks revenue generated from cancellation-save coupon offers used by the Member Experience team.
+## It identifies members who redeemed retention discount codes, joins each redemption to the member's latest subscription state, and estimates revenue collected or expected at renewal.
+## The resulting view supports analysis of upsell and save performance by coupon, plan, discount amount, renewal timing, and subscription status.
+
+create or replace view member_experience_coupons (
+    mo
+  , coupon_dt
+  , coupon_code
+  , account_code
+  , discount
+  , discount_percent
+  , total_discount
+  , plan_code
+  , state
+  , term_start_mo
+  , renewal_mo
+  , plan_value
+  , revenue
+  , expected_revenue
+  , plan_error_check
+) as (
+
+with discounts as (
+    select
+        date_trunc('month', coupon_dt) as mo
+      , c.*
+      , s.plan_code
+      , s.state
+      , date_trunc('month', s.term_start_dt) as term_start_mo
+      , date_trunc('month', s.renewal_date) as renewal_mo
+      , case
+            when plan_code = 'insider' then 14.99
+            when plan_code = 'insider_plus' then 149
+            when plan_code = 'all_access' then 249
+        end as plan_value
+      , round(
+            case
+                when total_discount > 0 and coupon_code in ('mx6for5') then
+                    case
+                        when total_discount between 0.1 and 10 then 5.00
+                        when total_discount between 10.1 and 20 then 10
+                        when total_discount between 20.1 and 30 then 15
+                        when total_discount between 30.1 and 40 then 20
+                        when total_discount between 40.1 and 50 then 25
+                        when total_discount between 50.1 and 60 then 30
+                    end
+                when total_discount > 0 and coupon_code in ('mx3monthsfor5') then
+                    case
+                        when total_discount between 0.1 and 10 then 5.00
+                        when total_discount between 10.1 and 20 then 10
+                        when total_discount between 20.1 and 30 then 15
+                    end
+                when total_discount in (110, 114) and coupon_code in ('mx35dollar', 'mx39dollar') then 149 - total_discount
+                when total_discount > 44 and coupon_code in ('mx30', 'mx35', 'mx40', 'mxdecade', 'mx50') then plan_value - total_discount
+                when total_discount > 149 and coupon_code in ('mx60') then 249 - total_discount
+            end
+          , 2
+        ) as revenue
+      , round(
+            case
+                when state in ('expired', 'canceled') then null
+                when (discount_percent is null and coupon_code in ('mx6for5') and plan_code = 'insider') and datediff(month, mo, term_start_mo) <= 6 then 30 - zeroifnull(revenue)
+                when (discount_percent is null and coupon_code in ('mx3monthsfor5') and plan_code = 'insider') and datediff(month, mo, term_start_mo) <= 3 then 15 - zeroifnull(revenue)
+                when (total_discount = 0 and discount_percent is null and coupon_code in ('mx35dollar', 'mx39dollar') and plan_code in ('insider_plus', 'all_access')) then 149 - discount
+                when (total_discount = 0 and discount_percent is not null and coupon_code in ('mx30', 'mx35', 'mx40', 'mxdecade', 'mx50') and plan_code in ('insider_plus', 'all_access')) then plan_value * (1 - (discount_percent / 100))
+                when (total_discount = 0 and discount_percent is not null and coupon_code in ('mx60') and plan_code = 'all_access') then 249 * (1 - (discount_percent / 100))
+            end
+          , 2
+        ) as expected_revenue
+      , case
+            when revenue is null and expected_revenue is null and state = 'active' then 'plan_change_error'
+            else null
+        end as plan_error_check
+    from (
+        select
+            date(convert_timezone('utc', 'america/chicago', applied_at::timestamp_ntz)) as coupon_dt
+          , coupon_code
+          , account_code
+          , discount
+          , discount_percent
+          , total_discount
+        from dailywire_recurly.classic.coupon_redemptions
+        where coupon_code in ('mx6for5', 'mx35dollar', 'mx30', 'mx35', 'mx40', 'mxdecade', 'mx50', 'mx60', 'mx39dollar', 'mx3monthsfor5')
+    ) c
+    left join (
+        select
+            plan_code
+          , account_code
+          , state
+          , date(convert_timezone('utc', 'america/chicago', current_period_started_at::timestamp_ntz)) as term_start_dt
+          , date(convert_timezone('utc', 'america/chicago', current_period_ends_at::timestamp_ntz)) as renewal_date
+        from dailywire_recurly.classic.subscriptions
+        qualify row_number() over (partition by account_code order by activated_at desc) = 1
+    ) s
+        on c.account_code = s.account_code
+)
+
+select *
+from discounts
+);
