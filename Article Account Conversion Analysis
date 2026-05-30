@@ -1,0 +1,187 @@
+## Article Account Conversion Analysis ##
+
+## This view measures how often anonymous article viewers create an account shortly after viewing content.
+## It joins article view activity to account creation events, calculates conversion rates by article, and applies statistical outlier detection to identify unusually high account conversion performance.
+## The resulting view supports an n8n Slack alerting workflow that flags articles exceeding high conversion thresholds.
+
+create or replace view article_account_conversion (
+    post_dt
+  , path
+  , title
+  , type_
+  , total_users
+  , total_conversions
+  , conversion_rate
+  , z_ratio
+  , z_ratio_q1
+  , z_ratio_q3
+  , z_ratio_iqr
+  , z_ratio_cutoff
+  , z_ratio_flag
+) as (
+
+with merge_views as (
+    select *
+    from (
+        select
+            anonymous_id
+          , path
+          , title
+          , timestamp as view_ts
+          , case
+                when path like '/news/%' then 'Article'
+            end as type_
+          , date(min(view_ts) over (partition by title)) as post_dt
+        from website.article_views
+        where date(timestamp) >= dateadd('day', -90, current_date)
+            and type_ = 'Article'
+            and plan_code is null
+    )
+)
+
+, account_creations as (
+    select
+        anonymous_id
+      , path
+      , timestamp as conversion_ts
+      , case
+            when path like '/episode/%' then 'Episode'
+            else location
+        end as location_fix
+    from website.account_creations
+    where date(timestamp) >= dateadd('day', -90, current_date)
+        and location_fix in ('Article', 'Episode', 'Video')
+)
+
+, uniques as (
+    select
+        anonymous_id
+      , path
+      , title
+      , location_fix
+      , 1 as converted
+      , min(seconds_to_convert)
+    from (
+        select
+            v.anonymous_id
+          , v.path
+          , v.title
+          , location_fix
+          , datediff(seconds, view_ts, conversion_ts) as seconds_to_convert
+        from merge_views v
+        inner join account_creations c
+            on c.anonymous_id = v.anonymous_id
+                and v.type_ = c.location_fix
+                and v.path = c.path
+        where seconds_to_convert between 1 and 3600
+    )
+    group by
+        1
+      , 2
+      , 3
+      , 4
+)
+
+, merged as (
+    select
+        v.anonymous_id
+      , v.path
+      , v.post_dt
+      , v.title
+      , v.type_
+      , zeroifnull(u.converted) as converted
+    from (
+        select distinct
+            anonymous_id
+          , post_dt
+          , path
+          , title
+          , type_
+        from merge_views
+    ) v
+    left join uniques u
+        on v.anonymous_id = u.anonymous_id
+            and v.path = u.path
+            and v.type_ = u.location_fix
+)
+
+, final_metrics as (
+    select
+        post_dt
+      , path
+      , title
+      , type_
+      , count(distinct anonymous_id) as total_users
+      , sum(converted) as total_conversions
+      , (total_conversions / total_users) as conversion_rate
+    from merged
+    group by
+        1
+      , 2
+      , 3
+      , 4
+    having total_conversions >= 0
+        and (
+            (case when type_ = 'Article' then total_users end) > 1000
+            or (case when type_ in ('Episode') then total_users end) > 500
+            or (case when type_ in ('Video') then total_users end) > 400
+        )
+    order by
+        conversion_rate desc
+)
+
+, z_scores as (
+    select
+        *
+      , (conversion_rate - avg(conversion_rate) over (partition by type_)) / stddev(conversion_rate) over (partition by type_) as z_ratio
+    from final_metrics
+)
+
+, tukey as (
+    select
+        type_
+      , approx_percentile(z_ratio, 0.25) as z_ratio_q1
+      , approx_percentile(z_ratio, 0.75) as z_ratio_q3
+    from z_scores
+    group by
+        1
+)
+
+, cutoff as (
+    select
+        z.*
+      , t.z_ratio_q1
+      , t.z_ratio_q3
+      , (t.z_ratio_q3 - t.z_ratio_q1) as z_ratio_iqr
+      , (t.z_ratio_q3 + 1.5 * (t.z_ratio_q3 - t.z_ratio_q1)) as z_ratio_cutoff
+      , case
+            when z.z_ratio > (t.z_ratio_q3 + 1.5 * z_ratio_iqr) then 1
+            else 0
+        end as z_ratio_flag
+    from z_scores z
+    join tukey t using (type_)
+)
+
+, final as (
+    select
+        post_dt
+      , path
+      , title
+      , type_
+      , total_users
+      , total_conversions
+      , conversion_rate
+      , z_ratio
+      , z_ratio_q1
+      , z_ratio_q3
+      , z_ratio_iqr
+      , z_ratio_cutoff
+      , z_ratio_flag
+    from cutoff
+)
+
+select *
+from final
+order by
+    5 desc
+);
