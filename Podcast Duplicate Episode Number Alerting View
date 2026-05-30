@@ -1,0 +1,104 @@
+## Podcast Duplicate Episode Number Alerting View ##
+
+## This view powers an n8n Slack alerting workflow that identifies duplicate episode numbers in podcast performance data.
+## It checks Spotify, YouTube, and RSS podcast sources for multiple episodes assigned to the same show and episode number.
+## The resulting view helps flag metadata issues by listing the conflicting episode titles, post dates, and episode GUIDs for review.
+
+create or replace view n8n_podcast_duplicate_ep_numbers (
+    source
+  , show
+  , ep_number
+  , ep_count
+  , ep_titles
+  , post_dates
+  , ep_guids
+) as (
+
+    select
+        source
+      , show
+      , ep_number
+      , count(*) as ep_count
+      , listagg(distinct video_episode_title, ' || ') within group (order by video_episode_title) as ep_titles
+      , listagg(distinct post_date, ' || ') within group (order by post_date) as post_dates
+      , listagg(distinct video_episode_guid, ' || ') within group (order by video_episode_guid) as ep_guids
+    from (
+        select distinct
+            'spotify' as source
+          , video_series_title as show
+          , video_episode_title
+          , video_episode_guid
+          , post_date
+          , round(episode_number) as ep_number
+        from spotify_video_plays
+        where episode_number > 0
+            and breakout = false
+    )
+    group by
+        1
+      , 2
+      , 3
+    having count(*) > 1
+
+    union all
+
+    select
+        source
+      , show
+      , ep_number
+      , count(*) as ep_count
+      , listagg(distinct video_episode_title, ' || ') within group (order by video_episode_title) as ep_titles
+      , listagg(distinct post_date, ' || ') within group (order by post_date) as post_dates
+      , listagg(distinct video_episode_guid, ' || ') within group (order by video_episode_guid) as ep_guids
+    from (
+        select distinct
+            'youtube' as source
+          , case
+                when video_series_title in ('Andrew Klavan (YouTube)', 'Ben Shapiro (YouTube)', 'Matt Walsh (YouTube)', 'Michael Knowles (YouTube)') then concat('The ', replace(video_series_title, ' (YouTube)'), ' Show')
+                when video_series_title in ('Jordan B Peterson (YouTube)') then 'The Jordan B. Peterson Podcast'
+                else replace(video_series_title, ' (YouTube)')
+            end as show
+          , video_episode_title
+          , video_episode_guid
+          , post_date
+          , round(case when show = 'Matt Fradd' and episode_number < 557 then 0 else episode_number end) as ep_number
+        from youtube_plays
+        where ep_number > 0
+            and breakout = false
+            and show not in ('Candace Owens Podcast', 'Jordan B Peterson Clips')
+    )
+    group by
+        1
+      , 2
+      , 3
+    having count(*) > 1
+
+    union all
+
+    select
+        source
+      , show
+      , ep_number
+      , count(*) as ep_count
+      , listagg(distinct podcast_episode_title, ' || ') within group (order by podcast_episode_title) as ep_titles
+      , listagg(distinct post_date, ' || ') within group (order by post_date) as post_dates
+      , listagg(distinct podcast_episode_guid, ' || ') within group (order by podcast_episode_guid) as ep_guids
+    from (
+        select distinct
+            'rss' as source
+          , podcast_series_title as show
+          , podcast_episode_title
+          , podcast_episode_guid
+          , post_date
+          , round(episode_number) as ep_number
+        from rss_plays
+        where episode_number > 0
+            and breakout = false
+    )
+    group by
+        1
+      , 2
+      , 3
+    having count(*) > 1
+
+);
