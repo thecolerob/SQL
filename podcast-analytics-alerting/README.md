@@ -1,4 +1,4 @@
-# Podcast Analytics
+# Podcast Analytics Alerting
 
 Projects focused on podcast performance measurement and data quality monitoring.
 
