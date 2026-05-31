@@ -1,0 +1,327 @@
+## Episodic Retention Analysis ##
+
+## This analysis measures audience retention across episodes of a serialized program.
+## It maps playback activity to subscriptions, identifies how many unique episodes each subscriber watched, and builds a distribution of episode completion depth across the audience.
+## The resulting output shows both episode-viewing retention rates, helping evaluate audience drop-off throughout a series.
+
+with android_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from android.playbacks
+    where dt >= '2025-01-01'
+        and dt < current_date()
+)
+
+, android_tv_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from android_tv.playbacks
+    where dt >= '2025-07-28'
+        and dt < current_date()
+)
+
+, apple_tv_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from apple_tv.playbacks
+    where dt >= '2025-03-24'
+        and dt < current_date()
+)
+
+, fire_tv_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from fire_tv.playbacks
+    where dt >= '2025-07-28'
+        and dt < current_date()
+)
+
+, ios_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from ios.playbacks
+    where dt >= '2025-01-01'
+        and dt < current_date()
+)
+
+, lg_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from lg.playbacks
+    where dt >= '2025-08-11'
+        and dt < current_date()
+)
+
+, roku_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from roku.playbacks
+    where dt >= '2025-04-08'
+        and dt < current_date()
+)
+
+, samsung_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from samsung.playbacks
+    where dt >= '2025-09-25'
+        and dt < current_date()
+)
+
+, vizio_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from vizio.playbacks
+    where dt >= '2025-07-28'
+        and dt < current_date()
+)
+
+, web_2 as (
+    select
+        convert_timezone('utc', 'america/chicago', timestamp::timestamp_ntz) as ts
+      , date(ts) as dt
+      , program as p
+      , title as t
+      , case
+            when user_id ilike '%legacy%' then trim(split(user_id, 'legacy-')[1], '""')
+            else user_id
+        end as user_id
+      , 1 as plays
+    from web.playbacks
+    where dt >= '2025-04-07'
+        and dt < current_date()
+)
+
+, new as (
+    select *
+    from android_2
+
+    union all
+
+    select *
+    from android_tv_2
+
+    union all
+
+    select *
+    from apple_tv_2
+
+    union all
+
+    select *
+    from fire_tv_2
+
+    union all
+
+    select *
+    from ios_2
+
+    union all
+
+    select *
+    from lg_2
+
+    union all
+
+    select *
+    from roku_2
+
+    union all
+
+    select *
+    from samsung_2
+
+    union all
+
+    select *
+    from vizio_2
+
+    union all
+
+    select *
+    from web_2
+)
+
+, plays as (
+    select *
+    from new
+)
+
+, sub_history as (
+    select *
+    from subscription_history
+)
+
+, showmap as (
+    select *
+    from show_mappings
+)
+
+, playsandplans as (
+    select
+        sub_history.st
+      , plays.ts
+      , case
+            when sub_history.endts is null then
+                case
+                    when sub_history.ets is null then
+                        case
+                            when sub_history.st is null then null
+                            else timestamp_from_parts(year(current_date()) + 5, 1, 1, 0, 0, 0)
+                        end
+                    else sub_history.ets
+                end
+            else sub_history.endts
+        end as endingts
+      , plays.dt
+      , plays.p
+      , plays.t
+      , plays.user_id
+      , plays.plays
+      , sub_history.cohort
+      , sub_history.sub_id
+      , sub_history.og_plan
+      , sub_history.plan
+    from plays
+    left join sub_history
+        on plays.user_id = sub_history.user_id
+    where (plays.ts >= sub_history.st and plays.ts < endingts)
+        or (sub_history.st is null and endingts is null)
+)
+
+, mapped as (
+    select
+        *
+      , row_number() over (partition by sub_id order by ts) as pn
+    from (
+        select
+            playsandplans.ts
+          , playsandplans.dt
+          , showmap.new_program as program
+          , showmap.new_title as title
+          , playsandplans.user_id
+          , playsandplans.plays
+          , playsandplans.cohort
+          , playsandplans.sub_id
+          , playsandplans.plan
+          , playsandplans.og_plan
+        from playsandplans
+        left join showmap
+            on playsandplans.p = showmap.old_program
+                and playsandplans.t = showmap.old_title
+    )
+)
+
+, show_name as (
+    select *
+    from mapped
+    where program = 'Show Name'
+        and title not ilike '%Trailer%'
+)
+
+, ep_count as (
+    select
+        r.account_email as email
+      , count(distinct title) as episode_count
+    from accounts r
+    inner join show_name sn
+        on sn.user_id = r.account_code
+    group by
+        1
+)
+
+, total as (
+    select
+        episode_count
+      , count(email) as user_count
+    from ep_count
+    group by
+        1
+)
+
+select
+    episode_count
+  , user_count
+  , round((user_count * 100.0) / sum(user_count) over (), 2) as percent_of_cohort
+  , round(
+        sum(user_count) over (
+            order by episode_count
+            rows between current row and unbounded following
+        ) * 100.0 / sum(user_count) over ()
+      , 2
+    ) as retention_rate
+from total
+order by
+    episode_count;
