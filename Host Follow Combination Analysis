@@ -1,0 +1,50 @@
+## Host Follow Combination Analysis ##
+
+## This query analyzes host follow combinations after the mobile app host-follow feature release.
+## It identifies users who followed more than one host, groups their followed hosts into unique combinations, and counts how often each combination occurred.
+## The resulting output helps understand cross-host audience affinity and common follow patterns on iOS and Android.
+
+with user_sets as (
+    select
+        user_id
+      , array_to_string(array_agg(distinct host) within group (order by host), ' | ') as host_combo
+      , count(distinct host) as num_hosts
+    from (
+        select
+            user_id
+          , host
+        from ios.click
+        where date(timestamp) >= '2025-07-28'
+            and label = 'Follow'
+
+        union all
+
+        select
+            user_id
+          , host
+        from android.click
+        where date(timestamp) >= '2025-07-28'
+            and label = 'Follow'
+    )
+    group by
+        1
+    having count(distinct host) > 1
+)
+
+, combo_counts as (
+    select
+        host_combo
+      , num_hosts
+      , count(*) as users
+    from user_sets
+    group by
+        1
+      , 2
+)
+
+select
+    *
+  , round(users / sum(users) over (), 2) as pct
+from combo_counts
+order by
+    3 desc;
