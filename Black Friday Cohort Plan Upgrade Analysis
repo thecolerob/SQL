@@ -1,0 +1,66 @@
+## Black Friday Cohort Plan Upgrade Analysis ##
+
+## This ad hoc analysis examines plan upgrade behavior among subscribers acquired during a Black Friday promotional period.
+## It tracks subscription plan changes over time, classifies upgrades and downgrades based on plan hierarchy, and identifies subscribers who moved into higher-value plans.
+## The resulting output isolates upgrade activity while excluding subscribers who later downgraded, allowing for evaluation of long-term plan migration behavior.
+
+with bf_cohort as (
+    select
+        uuid
+      , email
+      , plan_code
+      , date(convert_timezone('utc', 'america/chicago', activated_at::timestamp_ntz)) as dt
+    from subscriptions
+    where dt between '2023-11-20' and '2023-12-01'
+)
+
+, sh as (
+    select
+        subscription_uuid
+      , email
+      , sh.plan_code
+      , version_started_at as st
+      , version_ended_at as en
+      , subscription_state
+      , version_subscription_unit_amount
+      , lag(subscription_state) over (partition by sh.subscription_uuid order by st) as s
+      , lag(sh.plan_code) over (partition by sh.subscription_uuid order by st) as p
+      , case
+            when p = 'insider' then 0
+            when p = 'reader' then 1
+            when p = 'insider_plus' then 2
+            when p = 'all_access' then 3
+            else p
+        end as p_value
+      , case
+            when sh.plan_code = 'insider' then 0
+            when sh.plan_code = 'reader' then 1
+            when sh.plan_code = 'insider_plus' then 2
+            when sh.plan_code = 'all_access' then 3
+            else p
+        end as plan_code_value
+      , case
+            when p_value < plan_code_value and p_value = 0 then 'M_to_A'
+            when p_value < plan_code_value and p_value = 1 then 'R_to_A'
+            when p_value < plan_code_value and p_value = 2 then 'A_to_A'
+            when p_value > plan_code_value then 'Downgrade'
+            else null
+        end as upgrade_type
+    from subscription_history sh
+    join bf_cohort
+        on sh.subscription_uuid = bf_cohort.uuid
+    where sh.plan_code not in ('bentkey_pass')
+    order by
+        1
+      , st asc
+)
+
+select *
+from sh
+where upgrade_type in ('A_to_A', 'R_to_A')
+    and subscription_uuid not in (
+        select
+            subscription_uuid
+        from sh
+        where upgrade_type = 'Downgrade'
+    );
