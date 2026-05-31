@@ -6,6 +6,9 @@
 
 ## Project Categories
 
+### SQL Certificate Course
+Foundational SQL exercises and projects completed through the Break Into Tech SQL curriculum.
+
 ### Content Performance
 Analysis of content engagement, audience behavior, sharing, and conversion performance.
 
