@@ -1,0 +1,161 @@
+## Landing Page Conversion Funnel Analysis ##
+
+## This query was created for fast iteration with Marketing to track landing page variant performance.
+## It connects landing page views to clicks and downstream subscription purchases, matching each event to the nearest valid next step in the funnel.
+## The resulting output shows daily page views, clicks, CTR, subscriptions, revenue, CVR, and AOV by landing page variant.
+
+set (p, v1, v2) = ('/landing-page-name', 'o', 'p');
+
+with pv as (
+    select
+        timestamp as pv_timestamp
+      , path
+      , unbounce_variant_id
+      , anonymous_id
+      , 1 as page_viewed
+      , url
+    from website.pages
+    where path = $p
+        and unbounce_variant_id in ($v1, $v2)
+)
+
+, lpcc as (
+    select
+        timestamp as lpcc_timestamp
+      , context_page_path
+      , unbounce_variant_id
+      , anonymous_id
+      , label
+      , location
+      , 1 as cta_clicked
+    from website.landing_page_click
+    where unbounce_variant_id in ($v1, $v2)
+        and context_page_path = $p
+        and location not ilike 'join.%'
+)
+
+, sp as (
+    select
+        timestamp as sp_timestamp
+      , anonymous_id
+      , revenue
+      , 1 as sub_paid
+    from website.subscription_paid
+)
+
+, pv_to_lpcc as (
+    select
+        pv.*
+      , lpcc_timestamp
+      , datediff('milliseconds', pv_timestamp, lpcc_timestamp) as pv_to_click_dif
+      , zeroifnull(cta_clicked) as cta_clicked
+      , min(pv_to_click_dif) over (partition by pv.anonymous_id, lpcc_timestamp) as min_by_click
+      , min(pv_to_click_dif) over (partition by pv.anonymous_id, pv_timestamp) as min_by_pv
+    from pv
+    left join lpcc
+        on lpcc.anonymous_id = pv.anonymous_id
+            and lpcc.unbounce_variant_id = pv.unbounce_variant_id
+            and lpcc.lpcc_timestamp >= pv.pv_timestamp
+)
+
+, pv_to_lpcc_filtered as (
+    select
+        pv_timestamp
+      , path
+      , unbounce_variant_id
+      , anonymous_id
+      , page_viewed
+      , lpcc_timestamp
+      , pv_to_click_dif
+      , cta_clicked
+    from pv_to_lpcc
+    where pv_to_click_dif = min_by_click
+        and pv_to_click_dif = min_by_pv
+)
+
+, final_pv_to_lpcc as (
+    select
+        pv.pv_timestamp
+      , pv.path
+      , pv.unbounce_variant_id
+      , pv.anonymous_id
+      , pv.page_viewed
+      , pv_to_lpcc_filtered.lpcc_timestamp
+      , pv_to_lpcc_filtered.pv_to_click_dif
+      , pv_to_lpcc_filtered.cta_clicked
+    from pv
+    left join pv_to_lpcc_filtered
+        on pv.pv_timestamp = pv_to_lpcc_filtered.pv_timestamp
+            and pv.path = pv_to_lpcc_filtered.path
+            and pv.unbounce_variant_id = pv_to_lpcc_filtered.unbounce_variant_id
+            and pv.anonymous_id = pv_to_lpcc_filtered.anonymous_id
+)
+
+, lpcc_to_sp as (
+    select
+        final_pv_to_lpcc.*
+      , sp_timestamp
+      , sp.revenue
+      , datediff('milliseconds', final_pv_to_lpcc.lpcc_timestamp, sp_timestamp) as click_to_sub_dif
+      , zeroifnull(sub_paid) as sub_paid
+      , min(click_to_sub_dif) over (partition by final_pv_to_lpcc.anonymous_id) as min_dd
+    from final_pv_to_lpcc
+    left join sp
+        on final_pv_to_lpcc.anonymous_id = sp.anonymous_id
+            and final_pv_to_lpcc.lpcc_timestamp <= sp.sp_timestamp
+)
+
+, lpcc_to_sp_filtered as (
+    select *
+    from lpcc_to_sp
+    where click_to_sub_dif = min_dd
+)
+
+, final_funnel as (
+    select
+        final_pv_to_lpcc.pv_timestamp
+      , final_pv_to_lpcc.path
+      , final_pv_to_lpcc.unbounce_variant_id
+      , final_pv_to_lpcc.anonymous_id
+      , final_pv_to_lpcc.page_viewed
+      , final_pv_to_lpcc.lpcc_timestamp
+      , final_pv_to_lpcc.pv_to_click_dif
+      , final_pv_to_lpcc.cta_clicked
+      , lpcc_to_sp_filtered.sp_timestamp
+      , lpcc_to_sp_filtered.click_to_sub_dif
+      , lpcc_to_sp_filtered.revenue
+      , lpcc_to_sp_filtered.sub_paid
+    from final_pv_to_lpcc
+    left join lpcc_to_sp_filtered
+        on final_pv_to_lpcc.pv_timestamp = lpcc_to_sp_filtered.pv_timestamp
+            and final_pv_to_lpcc.path = lpcc_to_sp_filtered.path
+            and final_pv_to_lpcc.unbounce_variant_id = lpcc_to_sp_filtered.unbounce_variant_id
+            and final_pv_to_lpcc.anonymous_id = lpcc_to_sp_filtered.anonymous_id
+            and final_pv_to_lpcc.lpcc_timestamp = lpcc_to_sp_filtered.lpcc_timestamp
+)
+
+, report as (
+    select
+        date(pv_timestamp) as dt
+      , path
+      , unbounce_variant_id
+      , sum(page_viewed) as page_views
+      , sum(cta_clicked) as clicks
+      , clicks / page_views as ctr
+      , sum(sub_paid) as subs
+      , sum(revenue) as rev
+      , subs / page_views as cvr
+      , rev / subs as aov
+      , aov * cvr
+    from final_funnel
+    group by
+        1
+      , 2
+      , 3
+)
+
+select *
+from report
+order by
+    3
+  , 1;
