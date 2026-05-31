@@ -1,0 +1,98 @@
+## First Watch Program Attribution Analysis ##
+
+## This query takes the company's existing first-watch attribution data and structures attributed subscriptions by program and quarter.
+## It combines first-watch attribution data with subscription billing and program launch dates to measure subscriber acquisition driven by individual programs.
+## The resulting output was used to evaluate content-driven subscriber growth trends and help forecast acquisition performance for upcoming content releases.
+
+with first_play as (
+    select
+        dt
+      , first_play_program
+      , count(subscription_id) as first_play_subscriptions
+      , sum(net_billings) as sum_net_billings
+    from (
+        select
+            date(activated_at_ct) as dt
+          , fpr.subscription_id
+          , fpr.first_play_program
+          , billings.net_billings
+        from first_program_data fpr
+        left join (
+            select
+                recurly_subscription_id
+              , sum(net_amount) as net_billings
+            from billings_data
+            where billing_type = 'Gross Adds'
+            group by
+                1
+        ) billings
+            on fpr.subscription_id = billings.recurly_subscription_id
+    )
+    group by
+        1
+      , 2
+    order by
+        3 desc
+)
+
+select
+    date_trunc(quarter, dt) as quarter
+  , first_play_program
+  , coalesce(
+        case
+            when cms_launch < '2020-01-01' then null
+            else cms_launch
+        end
+      , min_dt
+    ) as program_release_dt
+  , sum(first_play_subscriptions) as first_play_subscriptions_total
+from (
+    select
+        fp.*
+      , f.cms_launch
+      , m.min_dt
+    from first_play fp
+    left join (
+        select
+            title
+          , date(created_at) as cms_launch
+        from cms.movies
+
+        union
+
+        select
+            title
+          , date(created_at) as cms_launch
+        from cms.shows
+        where not (
+                title = 'Destruction Decoded'
+                and cms_launch = '2026-03-09'
+            )
+            and not (
+                title = 'Klavans On The Culture'
+                and cms_launch = '2026-03-23'
+            )
+            and not (
+                title = 'A Tribute to Newfoundland'
+                and cms_launch = '2024-05-20'
+            )
+    ) f
+        on f.title = fp.first_play_program
+    left join (
+        select
+            first_play_program
+          , min(date(activated_at_ct)) as min_dt
+        from first_program_data
+        group by
+            1
+    ) m
+        on m.first_play_program = fp.first_play_program
+)
+where first_play_program is not null
+group by
+    1
+  , 2
+  , 3
+order by
+    1 asc
+  , 4 desc;
