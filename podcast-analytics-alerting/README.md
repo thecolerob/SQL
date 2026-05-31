@@ -1,9 +1,8 @@
 # Podcast Analytics Alerting
 
-Projects focused on podcast performance measurement and data quality monitoring.
+Projects focused on podcast data quality monitoring.
 
 ## Topics Covered
-- Audience growth monitoring
 - Performance anomaly detection
 - Metadata validation
 - Data quality automation
