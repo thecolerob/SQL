@@ -1,0 +1,70 @@
+## Influencer Coupon Revenue Analysis ##
+
+## This query analyzes subscription revenue tied to influencer and affiliate acquisition activity.
+## It combines influencer coupon redemptions from Recurly with subscription purchases containing influencer or affiliate UTM data.
+## The resulting output shows daily subscriptions, revenue, and AOV by coupon code and UTM content.
+
+with coupon_codes as (
+    select
+        name
+      , coupon_code
+    from coupons_data
+    where name ilike '%influence%'
+)
+
+, redemptions as (
+    select
+        coupon_code
+      , account_code
+      , convert_timezone('utc', 'america/chicago', applied_at::timestamp_ntz) as cts
+    from coupon_redemptions
+)
+
+, limitedcodes as (
+    select *
+    from redemptions
+    where coupon_code in (
+        select
+            coupon_code
+        from coupon_codes
+    )
+)
+
+, utms as (
+    select
+        date(timestamp) as dt
+      , ck_utm_medium
+      , ck_utm_source
+      , ck_utm_campaign
+      , ck_utm_content
+      , revenue
+      , user_id
+    from website.subscription_purchases
+    where ck_utm_medium in ('influencer', 'affiliate')
+)
+
+, joined as (
+    select
+        utms.*
+      , limitedcodes.coupon_code
+      , date(limitedcodes.cts) as cdt
+    from utms
+    full outer join limitedcodes
+        on utms.user_id = limitedcodes.account_code
+)
+
+select
+    coalesce(cdt, dt) as dt
+  , coupon_code
+  , ck_utm_content
+  , count(distinct user_id) as subs
+  , zeroifnull(sum(revenue)) as rev
+  , round(rev / subs, 2) as aov
+from joined
+where revenue is not null
+group by
+    1
+  , 2
+  , 3
+order by
+    1;
