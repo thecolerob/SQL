@@ -1,0 +1,146 @@
+## Popup Conversion Funnel Analysis ##
+
+## This query was created for fast iteration with Marketing to track popup campaign performance.
+## It connects popup views to clicks and downstream subscription purchases, matching each event to the nearest valid next step in the funnel.
+## The resulting output shows daily popup views, clicks, CTR, subscriptions, revenue, CVR, and AOV by campaign.
+
+set (v1, v2) = ('533448', '533453');
+
+with pop_views as (
+    select
+        anonymous_id
+      , timestamp as v_timestamp
+      , campaign_id
+      , 1 as pop_up_viewed
+    from website.popup_views
+    where campaign_id in ($v1, $v2)
+)
+
+, pop_clicks as (
+    select
+        anonymous_id
+      , timestamp as c_timestamp
+      , campaign_id
+      , 1 as pop_up_clicked
+    from website.popup_clicks
+    where campaign_id in ($v1, $v2)
+)
+
+, sp as (
+    select
+        timestamp as sp_timestamp
+      , anonymous_id
+      , revenue
+      , 1 as sub_paid
+    from website.subscription_purchases
+)
+
+, views_to_clicks as (
+    select
+        pop_views.*
+      , c_timestamp
+      , datediff('milliseconds', v_timestamp, c_timestamp) as view_to_click_dif
+      , zeroifnull(pop_up_clicked) as pop_up_clicked
+      , min(view_to_click_dif) over (partition by pop_views.anonymous_id, c_timestamp) as min_by_click
+      , min(view_to_click_dif) over (partition by pop_views.anonymous_id, v_timestamp) as min_by_pv
+    from pop_views
+    left join pop_clicks
+        on pop_clicks.anonymous_id = pop_views.anonymous_id
+            and pop_clicks.campaign_id = pop_views.campaign_id
+            and pop_clicks.c_timestamp >= pop_views.v_timestamp
+)
+
+, views_to_clicks_filtered as (
+    select
+        v_timestamp
+      , anonymous_id
+      , pop_up_viewed
+      , c_timestamp
+      , view_to_click_dif
+      , views_to_clicks.campaign_id
+      , pop_up_clicked
+    from views_to_clicks
+    where view_to_click_dif = min_by_click
+        and view_to_click_dif = min_by_pv
+)
+
+, final_views_to_clicks as (
+    select
+        pop_views.v_timestamp
+      , pop_views.anonymous_id
+      , pop_views.pop_up_viewed
+      , pop_views.campaign_id
+      , views_to_clicks_filtered.c_timestamp
+      , views_to_clicks_filtered.view_to_click_dif
+      , views_to_clicks_filtered.pop_up_clicked
+    from pop_views
+    left join views_to_clicks_filtered
+        on pop_views.v_timestamp = views_to_clicks_filtered.v_timestamp
+            and pop_views.campaign_id = views_to_clicks_filtered.campaign_id
+            and pop_views.anonymous_id = views_to_clicks_filtered.anonymous_id
+)
+
+, pop_clicks_to_sp as (
+    select
+        final_views_to_clicks.*
+      , sp_timestamp
+      , sp.revenue
+      , datediff('milliseconds', final_views_to_clicks.c_timestamp, sp_timestamp) as click_to_sub_dif
+      , zeroifnull(sub_paid) as sub_paid
+      , min(click_to_sub_dif) over (partition by final_views_to_clicks.anonymous_id) as min_dd
+    from final_views_to_clicks
+    left join sp
+        on final_views_to_clicks.anonymous_id = sp.anonymous_id
+            and final_views_to_clicks.c_timestamp <= sp.sp_timestamp
+)
+
+, pop_clicks_to_sp_filtered as (
+    select *
+    from pop_clicks_to_sp
+    where click_to_sub_dif = min_dd
+)
+
+, final_funnel as (
+    select
+        final_views_to_clicks.v_timestamp
+      , final_views_to_clicks.campaign_id
+      , final_views_to_clicks.anonymous_id
+      , final_views_to_clicks.pop_up_viewed
+      , final_views_to_clicks.c_timestamp
+      , final_views_to_clicks.view_to_click_dif
+      , final_views_to_clicks.pop_up_clicked
+      , pop_clicks_to_sp_filtered.sp_timestamp
+      , pop_clicks_to_sp_filtered.click_to_sub_dif
+      , pop_clicks_to_sp_filtered.revenue
+      , pop_clicks_to_sp_filtered.sub_paid
+    from final_views_to_clicks
+    left join pop_clicks_to_sp_filtered
+        on final_views_to_clicks.v_timestamp = pop_clicks_to_sp_filtered.v_timestamp
+            and final_views_to_clicks.campaign_id = pop_clicks_to_sp_filtered.campaign_id
+            and final_views_to_clicks.anonymous_id = pop_clicks_to_sp_filtered.anonymous_id
+            and final_views_to_clicks.c_timestamp = pop_clicks_to_sp_filtered.c_timestamp
+)
+
+, report as (
+    select
+        date(v_timestamp) as dt
+      , campaign_id
+      , sum(pop_up_viewed) as pop_up_views
+      , sum(pop_up_clicked) as clicks
+      , clicks / pop_up_views as ctr
+      , sum(sub_paid) as subs
+      , sum(revenue) as rev
+      , subs / pop_up_views as cvr
+      , rev / subs as aov
+      , aov * cvr
+    from final_funnel
+    group by
+        1
+      , 2
+)
+
+select *
+from report
+order by
+    2
+  , 1;
